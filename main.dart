@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:math';
 
 void main() {
   runApp(QuizApp());
@@ -23,6 +24,7 @@ class _QuizPageState extends State<QuizPage> {
   int currentQuestionIndex = 0;
   int lives = 5;
   bool isOptionSelected = false;
+  bool isAnswerCorrect = false;
 
   final List<Map<String, Object>> questions = [
     {
@@ -47,12 +49,27 @@ class _QuizPageState extends State<QuizPage> {
     },
   ];
 
+  late List<Map<String, Object>> questionQueue;
+
+  @override
+  void initState() {
+    super.initState();
+    resetGame();
+  }
+
+  void shuffleOptions() {
+    final currentOptions = questionQueue[currentQuestionIndex]['options'] as List<String>;
+    currentOptions.shuffle(Random());
+  }
+
   void handleAnswer(String selectedAnswer) {
-    final correctAnswer = questions[currentQuestionIndex]['correctAnswer'];
+    final correctAnswer = questionQueue[currentQuestionIndex]['correctAnswer'] as String;
 
     setState(() {
       isOptionSelected = true;
-      if (selectedAnswer != correctAnswer) {
+      isAnswerCorrect = (selectedAnswer == correctAnswer);
+
+      if (!isAnswerCorrect) {
         lives--;
         if (lives == 0) {
           _showGameOverDialog();
@@ -63,12 +80,38 @@ class _QuizPageState extends State<QuizPage> {
 
   void nextQuestion() {
     setState(() {
-      if (currentQuestionIndex < questions.length - 1) {
-        currentQuestionIndex++;
-        isOptionSelected = false;
+      if (!isAnswerCorrect) {
+        // Move a pergunta errada para o final da fila
+        final incorrectQuestion = questionQueue.removeAt(currentQuestionIndex);
+        questionQueue.add(incorrectQuestion);
       } else {
-        _showWinDialog();
+        // Se a resposta estiver correta, remover a pergunta da fila
+        questionQueue.removeAt(currentQuestionIndex);
       }
+
+      if (questionQueue.isEmpty) {
+        // Se todas as perguntas foram respondidas corretamente
+        _showWinDialog();
+      } else {
+        // Caso contrário, avançar para a próxima pergunta
+        if (currentQuestionIndex >= questionQueue.length) {
+          currentQuestionIndex = 0;
+        }
+        isOptionSelected = false;
+        isAnswerCorrect = false;
+        shuffleOptions();
+      }
+    });
+  }
+
+  void resetGame() {
+    setState(() {
+      currentQuestionIndex = 0;
+      lives = 5;
+      isOptionSelected = false;
+      isAnswerCorrect = false;
+      questionQueue = List.from(questions);
+      shuffleOptions();
     });
   }
 
@@ -96,7 +139,7 @@ class _QuizPageState extends State<QuizPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Parabéns!'),
-        content: Text('Você completou o quiz.'),
+        content: Text('Você completou o quiz com sucesso.'),
         actions: [
           TextButton(
             onPressed: () {
@@ -110,17 +153,23 @@ class _QuizPageState extends State<QuizPage> {
     );
   }
 
-  void resetGame() {
-    setState(() {
-      currentQuestionIndex = 0;
-      lives = 3;
-      isOptionSelected = false;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    final question = questions[currentQuestionIndex];
+    if (questionQueue.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text('Quiz com Vidas'),
+        ),
+        body: Center(
+          child: Text(
+            'Carregando...',
+            style: TextStyle(fontSize: 20),
+          ),
+        ),
+      );
+    }
+
+    final question = questionQueue[currentQuestionIndex];
 
     return Scaffold(
       appBar: AppBar(
@@ -151,6 +200,13 @@ class _QuizPageState extends State<QuizPage> {
                     : () {
                   handleAnswer(option);
                 },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isOptionSelected && option == question['correctAnswer']
+                      ? Colors.green
+                      : isOptionSelected && option != question['correctAnswer']
+                      ? Colors.red
+                      : null,
+                ),
                 child: Text(option),
               ),
             );
